@@ -22,11 +22,13 @@ class EasyWebRTC extends EventTarget {
         if (!this.dataChannel) return
 
         this.dataChannel.onopen = (...args: Array<any>) => {
+            console.log(args)
             this.dispatchEvent(new CustomEvent('started', { detail: args }))
         }
 
-        this.dataChannel.onmessage = (message) => {
-            this.dispatchEvent(new CustomEvent('message', { detail: message }))
+        this.dataChannel.onmessage = (messageEvent: MessageEvent) => {
+            console.log(messageEvent)
+            this.dispatchEvent(new CustomEvent('message', { detail: JSON.parse(messageEvent.data) }))
         }
 
         this.dataChannel.onclose = (...args: Array<any>) => {
@@ -36,6 +38,11 @@ class EasyWebRTC extends EventTarget {
         this.dataChannel.onerror = (...args: Array<any>) => {
             this.dispatchEvent(new CustomEvent('error', { detail: args }))
         }
+    }
+
+    send (data: { [key: string]: string | number | boolean }) {
+        console.log(this.dataChannel)
+        this.dataChannel?.send(JSON.stringify(data))
     }
 }
 
@@ -80,8 +87,12 @@ export class Answerer extends EasyWebRTC {
         })
 
         this.peerConnection.setRemoteDescription(new RTCSessionDescription(this.initialOffer))
-        this.dataChannel = this.peerConnection.createDataChannel('data')
-        this.attachDataChannel()
+
+        this.peerConnection.ondatachannel = (event) => {
+            this.dataChannel = event.channel
+            this.attachDataChannel()
+        }
+
         const answer = await this.peerConnection.createAnswer()
         await this.peerConnection.setLocalDescription(answer)
     }

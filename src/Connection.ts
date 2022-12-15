@@ -3,35 +3,39 @@ import { Root } from 'react-dom/client'
 import { html } from 'htm/react'
 import { Initiator, Answerer } from './EasyWebRTC'
 import { intercept } from './intercept'
-import 'share-api-polyfill'
+import './ShareApiPonyfill'
 
 type ConnectionMessages = {
     invite: {
-        title: string,
-        text: string,
-        html: ReturnType<typeof html>,
-        buttonText: ReturnType<typeof html>,
+        share: {
+            title: string,
+            text: string,    
+        }
+        before: (onClick: Function) => ReturnType<typeof html>,
+        after: () => ReturnType<typeof html>,
     },
     answer: {
-        title: string,
-        text: string,
-        html: ReturnType<typeof html>
-        buttonText: ReturnType<typeof html>,
+        share: {
+            title: string,
+            text: string,    
+        },
+        before: (onClick: Function) => ReturnType<typeof html>,
+        after: () => ReturnType<typeof html>
     },
-    intercepted: {
-        html: ReturnType<typeof html>
-    },
+    intercepted: ReturnType<typeof html>
     error: ReturnType<typeof html>
 }
 
 export const createConnection = async (root: Root, configuration: RTCConfiguration & { messages: ConnectionMessages }) => {    
     const { intercepted, interceptor } = intercept(location.hash)
     
+    const { answer, invite } = configuration.messages
+
     /**
      * The hash seems to come from a step further in the process, we need to send it to the iniating tab.
      */
     if (intercepted) {
-        root.render(configuration.messages.intercepted.html)
+        root.render(configuration.messages.intercepted)
         return false
     }
     
@@ -47,46 +51,44 @@ export const createConnection = async (root: Root, configuration: RTCConfigurati
             const offer = (event as any).detail.offer
             const url = new URL(location.toString())
             url.hash = `offer:${btoa(JSON.stringify(offer))}`
-        
-            root.render(html`
-                <button onClick=${() => {
-                    navigator.share({
-                        title: configuration.messages.invite.title,
-                        text: configuration.messages.invite.text,
-                        url: url.toString(),
-                    })
-                    .then(() => {
-                        root.render(configuration.messages.invite.html)
-                    })
-                    .catch( error => {
-                        root.render(configuration.messages.error)
-                        console.error(error)
-                    })
-                }}>${configuration.messages.invite.buttonText}</button>
-            `)
+            const callback = () => {
+                navigator.share({
+                    title: invite.share.title,
+                    text: invite.share.text,
+                    url: url.toString(),
+                })
+                .then(() => {
+                    root.render(invite.after())
+                })
+                .catch( error => {
+                    root.render(configuration.messages.error)
+                    console.error(error)
+                })
+            }
+
+            root.render(invite.before(callback))
         })
         
         connection.addEventListener('answer', (event: Event) => {
-            const answer = (event as any).detail.answer
+            const answerObject = (event as any).detail.answer
             const url = new URL(location.toString())
-            url.hash = `answer:${btoa(JSON.stringify(answer))}`
+            url.hash = `answer:${btoa(JSON.stringify(answerObject))}`
+            const callback = () => {
+                navigator.share({
+                    title: answer.share.title,
+                    text: answer.share.text,
+                    url: url.toString(),
+                })
+                .then(() => {
+                    root.render(answer.after())
+                })
+                .catch( error => {
+                    root.render(configuration.messages.error)
+                    console.error(error)
+                })
+            }
         
-            root.render(html`
-                <button onClick=${() => {
-                    navigator.share({
-                        title: configuration.messages.answer.title,
-                        text: configuration.messages.answer.text,
-                        url: url.toString(),
-                    })
-                    .then(() => {
-                        root.render(configuration.messages.answer.html)
-                    })
-                    .catch( error => {
-                        root.render(configuration.messages.error)
-                        console.error(error)
-                    })
-                }}>${configuration.messages.answer.buttonText}</button>
-            `)
+            root.render(answer.before(callback))
         })
     
         interceptor.addEventListener('message', (event) => {
